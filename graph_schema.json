@@ -1,0 +1,103 @@
+{
+    "nodes": [
+        {
+            "label": "PurchaseRequest",
+            "description": "Internal purchase requisition raised within the organization.",
+            "primary_key": "purchase_requisition_id",
+            "properties": {
+                "purchase_requisition_id": "Unique identifier of PR (PR-INF-xxx). Use this for filtering.",
+                "purchase_requisition_title": "Title of the purchase requisition.",
+                "requester_name": "Requester identifier (ID, not actual name).",
+                "high_risk": "High risk indicator (YES/NO).",
+                "total_cost_amount": "Total estimated cost amount.",
+                "currency": "Currency of total cost amount.",
+                "responsibility_center": "Responsibility center code.",
+                "approval_status": "Approval status (APPROVED/REJECTED).",
+                "approval_date": "Approval date.",
+                "approver_name": "Approver name."
+            }
+        },
+        {
+            "label": "PurchaseOrder",
+            "description": "Formal purchase order created after requisition approval.",
+            "primary_key": "purchase_order_number",
+            "properties": {
+                "purchase_order_number": "Unique PO identifier (PO-INF-xxx). Use this for filtering.",
+                "purchase_order_version": "Version number of the purchase order.",
+                "purchase_order_title": "Title/description of PO.",
+                "purchase_order_date": "Creation date of PO.",
+                "event_status": "Status of PO (Ordered etc.).",
+                "supplier_id": "Supplier identifier.",
+                "transaction_type": "OPEX/CAPEX etc.",
+                "high_risk": "High risk indicator (YES/NO).",
+                "payment_terms": "Payment terms (NET 30, NET 45 etc.).",
+                "total_cost_amount": "Total PO cost amount.",
+                "currency": "Currency of PO amount.",
+                "line_item_description": "Line item description.",
+                "purchase_requisition_id": "Linked PR id.",
+                "invoice_reconciliation_id": "Invoice reconciliation id."
+            }
+        },
+        {
+            "label": "Contract",
+            "description": "Legal and commercial agreement established with a supplier.",
+            "primary_key": "contract_number",
+            "properties": {
+                "contract_number": "Unique contract id (C-INF-xxx). Use this for filtering.",
+                "agreement_type": "Agreement type (NDA/MSA/SLA etc.).",
+                "agreement_name": "Agreement name.",
+                "agreement_description": "Agreement description.",
+                "contract_start_date": "Start date.",
+                "contract_end_date": "End date.",
+                "contract_status": "Lifecycle status (In Effect/Expired etc.).",
+                "supplier_id": "Supplier identifier.",
+                "supplier_name": "Supplier name.",
+                "primary_business_unit": "Business unit.",
+                "user_country": "Country.",
+                "contract_term_type": "Fixed/Perpetual.",
+                "hierarchy_type": "PARENT/CHILD.",
+                "termination_comments": "Termination comments.",
+                "termination_penalty_amount": "Penalty amount.",
+                "purchase_order_number": "Linked PO number.",
+                "purchase_requisition_id": "Linked PR number."
+            }
+        },
+        {
+            "label": "Invoice",
+            "description": "Billing document issued for goods or services provided.",
+            "primary_key": "invoice_reconciliation_id",
+            "properties": {
+                "invoice_reconciliation_id": "Unique invoice reconciliation id (IR-INF-xxx). Use this for filtering.",
+                "invoice_number": "Invoice number.",
+                "invoice_date": "Invoice issued date.",
+                "invoice_received_time": "Invoice received timestamp.",
+                "gross_amount": "Invoice gross amount.",
+                "invoice_currency": "Invoice currency.",
+                "payment_term": "Payment term on invoice.",
+                "invoice_purpose": "STANDARD/CREDIT etc.",
+                "line_item_description": "Invoice line item description.",
+                "purchase_order_number": "Linked PO number."
+            }
+        }
+    ],
+    "relationships": [
+        {
+            "type": "FULFILLS_REQUISITION",
+            "from": "PurchaseOrder",
+            "to": "PurchaseRequest",
+            "description": "PurchaseOrder fulfills PurchaseRequest."
+        },
+        {
+            "type": "GENERATES_INVOICE",
+            "from": "PurchaseOrder",
+            "to": "Invoice",
+            "description": "PurchaseOrder generates Invoice."
+        },
+        {
+            "type": "MASTER_SERVICE_AGREEMENT",
+            "from": "PurchaseOrder",
+            "to": "Contract",
+            "description": "PurchaseOrder linked to Contract via agreement."
+        }
+    ]
+}

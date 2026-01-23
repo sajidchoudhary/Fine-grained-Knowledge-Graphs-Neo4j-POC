@@ -1,0 +1,55 @@
+2026-01-23 19:56:58,526 | INFO | neo4j-vector-ingest | Logging initialized. Log file: D:\DesktopData\KG\neo4j_graph_rag\vector_ingest.log
+2026-01-23 19:56:58,535 | INFO | neo4j-vector-ingest | Starting vector ingestion job...
+2026-01-23 19:56:58,537 | INFO | neo4j-vector-ingest | Loaded 30 triplets from Data/ontology.json
+2026-01-23 19:56:58,540 | INFO | neo4j-vector-ingest | Extracted 39 unique nodes for embedding
+2026-01-23 19:56:59,632 | INFO | neo4j-vector-ingest | Connecting to Neo4j: neo4j://localhost:7687
+2026-01-23 19:57:03,915 | INFO | neo4j-vector-ingest | Found 0 existing KGDocument nodes
+2026-01-23 19:57:03,917 | INFO | neo4j-vector-ingest | To embed=39 | skipped (unchanged)=0
+2026-01-23 19:57:15,628 | ERROR | neo4j-vector-ingest | Vector ingestion failed
+neo4j.exceptions.GqlError: {gql_status: 22N01} {gql_status_description: error: data exception - invalid type. Expected the value Map{purchase_requisition_id -> String("PR-INF-001"), transaction_type -> String("OPEX"), payment_terms -> String("NET 30"), purchase_order_date -> String("2024-01-15 00:00:00"), total_cost_amount -> Long(4800000), lookupKey -> String("purchase_order_number"), purchase_order_title -> String("This purchase order authorizes global data center capacity provisioning covering compute, storage, and network services for Tier-1 workloads. The contract value of USD 4,800,000 includes SLA-backed availability guarantees and regulatory compliance obligations. Monthly billing is based on committed and burst capacity metrics."), invoice_reconciliation_id -> String("INVREC-PO-INF-001"), purchase_order_version -> Long(1), purchase_order_number -> String("PO-INF-001"), line_item_description -> String("This line item includes virtual compute clusters, SAN storage, and redundant network links. The service includes proactive monitoring, automated patching, and hardware replacement within 4 hours. SLA violations incur penalties of 1.5% per incident."), currency -> String("USD"), supplier_id -> String("SUP-001"), high_risk -> String("YES"), event_status -> String("Ordered")} to be of type BOOLEAN, STRING, INTEGER, FLOAT, DATE, LOCAL TIME, ZONED TIME, LOCAL DATETIME, ZONED DATETIME, DURATION or POINT, but was of type MAP NOT NULL.} {message: 22N01: Expected the value Map{purchase_requisition_id -> String("PR-INF-001"), transaction_type -> String("OPEX"), payment_terms -> String("NET 30"), purchase_order_date -> String("2024-01-15 00:00:00"), total_cost_amount -> Long(4800000), lookupKey -> String("purchase_order_number"), purchase_order_title -> String("This purchase order authorizes global data center capacity provisioning covering compute, storage, and network services for Tier-1 workloads. The contract value of USD 4,800,000 includes SLA-backed availability guarantees and regulatory compliance obligations. Monthly billing is based on committed and burst capacity metrics."), invoice_reconciliation_id -> String("INVREC-PO-INF-001"), purchase_order_version -> Long(1), purchase_order_number -> String("PO-INF-001"), line_item_description -> String("This line item includes virtual compute clusters, SAN storage, and redundant network links. The service includes proactive monitoring, automated patching, and hardware replacement within 4 hours. SLA violations incur penalties of 1.5% per incident."), currency -> String("USD"), supplier_id -> String("SUP-001"), high_risk -> String("YES"), event_status -> String("Ordered")} to be of type BOOLEAN, STRING, INTEGER, FLOAT, DATE, LOCAL TIME, ZONED TIME, LOCAL DATETIME, ZONED DATETIME, DURATION or POINT, but was of type MAP NOT NULL.} {diagnostic_record: {'_classification': 'CLIENT_ERROR', 'OPERATION': '', 'OPERATION_CODE': '0', 'CURRENT_SCHEMA': '/'}} {raw_classification: CLIENT_ERROR}
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "D:\DesktopData\KG\neo4j_graph_rag\vector_store.py", line 349, in main
+    session.execute_write(upsert_documents_batch, batch)
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\session.py", line 720, in execute_write
+    return self._run_transaction(
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\session.py", line 543, in _run_transaction
+    result = transaction_function(tx, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DesktopData\KG\neo4j_graph_rag\vector_store.py", line 242, in upsert_documents_batch
+    tx.run(query, docs=docs)
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\transaction.py", line 201, in run
+    result._tx_ready_run(query, parameters)
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\result.py", line 178, in _tx_ready_run
+    self._run(query, parameters, None, None, None, None, None, None)
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\result.py", line 237, in _run
+    self._attach()
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\work\result.py", line 439, in _attach
+    self._connection.fetch_message()
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\io\_common.py", line 193, in inner
+    func(*args, **kwargs)
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\io\_bolt.py", line 867, in fetch_message
+    res = self._process_message(tag, fields)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\io\_bolt6.py", line 548, in _process_message
+    response.on_failure(summary_metadata or {})
+  File "D:\DesktopData\KG\neo4j_graph_rag\venv\Lib\site-packages\neo4j\_sync\io\_common.py", line 263, in on_failure
+    raise self._hydrate_error(metadata)
+neo4j.exceptions.CypherTypeError: {neo4j_code: Neo.ClientError.Statement.TypeError} {message: Property values can only be of primitive types or arrays thereof. Encountered: Map{purchase_requisition_id -> String("PR-INF-001"), transaction_type -> String("OPEX"), payment_terms -> String("NET 30"), purchase_order_date -> String("2024-01-15 00:00:00"), total_cost_amount -> Long(4800000), lookupKey -> String("purchase_order_number"), purchase_order_title -> String("This purchase order authorizes global data center capacity provisioning covering compute, storage, and network services for Tier-1 workloads. The contract value of USD 4,800,000 includes SLA-backed availability guarantees and regulatory compliance obligations. Monthly billing is based on committed and burst capacity metrics."), invoice_reconciliation_id -> String("INVREC-PO-INF-001"), purchase_order_version -> Long(1), purchase_order_number -> String("PO-INF-001"), line_item_description -> String("This line item includes virtual compute clusters, SAN storage, and redundant network links. The service includes proactive monitoring, automated patching, and hardware replacement within 4 hours. SLA violations incur penalties of 1.5% per incident."), currency -> String("USD"), supplier_id -> String("SUP-001"), high_risk -> String("YES"), event_status -> String("Ordered")}.} {gql_status: 22G03} {gql_status_description: error: data exception - invalid value type}
+2026-01-23 19:57:15,882 | INFO | neo4j-vector-ingest | Neo4j driver closed
+2026-01-23 20:08:43,732 | INFO | neo4j-vector-ingest | Logging initialized. Log file: D:\DesktopData\KG\neo4j_graph_rag\vector_ingest.log
+2026-01-23 20:08:43,732 | INFO | neo4j-vector-ingest | Starting vector ingestion job...
+2026-01-23 20:08:43,732 | INFO | neo4j-vector-ingest | Loaded 30 triplets from Data/ontology.json
+2026-01-23 20:08:43,737 | INFO | neo4j-vector-ingest | Extracted 39 unique nodes for embedding
+2026-01-23 20:08:44,023 | INFO | neo4j-vector-ingest | Connecting to Neo4j: neo4j://localhost:7687
+2026-01-23 20:08:48,298 | INFO | neo4j-vector-ingest | Found 0 existing KGDocument nodes
+2026-01-23 20:08:48,298 | INFO | neo4j-vector-ingest | To embed=39 | skipped (unchanged)=0
+2026-01-23 20:09:05,940 | INFO | neo4j-vector-ingest | Upserted 10/39 documents
+2026-01-23 20:09:23,289 | INFO | neo4j-vector-ingest | Upserted 20/39 documents
+2026-01-23 20:09:32,400 | INFO | neo4j-vector-ingest | Upserted 30/39 documents
+2026-01-23 20:09:43,290 | INFO | neo4j-vector-ingest | Upserted 39/39 documents
+2026-01-23 20:09:43,290 | INFO | neo4j-vector-ingest | Done. Upserted=39 | Skipped=0
+2026-01-23 20:09:43,292 | INFO | neo4j-vector-ingest | Neo4j driver closed

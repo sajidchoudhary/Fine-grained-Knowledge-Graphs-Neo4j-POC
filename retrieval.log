@@ -1,0 +1,21 @@
+2026-01-21 12:35:31,353 | INFO | neo4j-retrieval | Logging initialized. Log file: D:\DesktopData\KG\neo4j_graph_rag\retrieval.log
+2026-01-21 12:36:27,787 | INFO | neo4j-retrieval | Loaded config from .env
+2026-01-21 12:36:27,832 | INFO | neo4j-retrieval | Graph schema loaded from graph_schema.json
+2026-01-21 12:36:27,834 | INFO | neo4j-retrieval | Initializing Retrieval with model=gpt-5.1 top_k=5
+2026-01-21 12:36:31,437 | INFO | neo4j-retrieval | LangChain pipelines initialized successfully
+2026-01-21 12:36:31,437 | INFO | neo4j-retrieval | Pipeline started for question: "What are the payment terms for PO-INF-001?"
+2026-01-21 12:36:31,437 | INFO | neo4j-retrieval | Generating Cypher for question: "What are the payment terms for PO-INF-001?"
+2026-01-21 12:36:33,052 | INFO | neo4j-retrieval | Cypher query generated successfully
+2026-01-21 12:36:33,052 | INFO | neo4j-retrieval | Running Cypher query...
+2026-01-21 12:36:37,351 | INFO | neo4j-retrieval | Neo4j query executed successfully. Rows returned=1
+2026-01-21 12:36:37,351 | INFO | neo4j-retrieval | Generating final answer from query results...
+2026-01-21 12:36:38,925 | INFO | neo4j-retrieval | Final answer generated successfully
+2026-01-21 12:36:38,925 | INFO | neo4j-retrieval | Pipeline completed successfully
+2026-01-21 12:38:33,412 | INFO | neo4j-retrieval | Pipeline started for question: "What are the payment terms for PO-INF-001?"
+2026-01-21 12:38:33,413 | INFO | neo4j-retrieval | Generating Cypher for question: "What are the payment terms for PO-INF-001?"
+2026-01-21 12:38:35,236 | INFO | neo4j-retrieval | Cypher query generated successfully
+2026-01-21 12:38:35,236 | INFO | neo4j-retrieval | Running Cypher query...
+2026-01-21 12:38:35,259 | INFO | neo4j-retrieval | Neo4j query executed successfully. Rows returned=1
+2026-01-21 12:38:35,261 | INFO | neo4j-retrieval | Generating final answer from query results...
+2026-01-21 12:38:36,724 | INFO | neo4j-retrieval | Final answer generated successfully
+2026-01-21 12:38:36,724 | INFO | neo4j-retrieval | Pipeline completed successfully

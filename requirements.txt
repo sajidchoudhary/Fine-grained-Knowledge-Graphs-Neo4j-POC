@@ -1,0 +1,4 @@
+neo4j==6.1.0
+dotenv==0.9.9
+langchain-core==1.2.7
+langchain-openai==1.1.7
