@@ -26,8 +26,6 @@ CYPHER_TEMPLATES = [
 ]
 
 
-
-
 NEO4J_TEMPLATE_BASED_CYPHER_PROMPT_TEMPLATE = """
 You are an expert Cypher query generator for Neo4j.
 
@@ -61,6 +59,15 @@ You are an expert Cypher query generator for Neo4j.
 - If request contains an Invoice ID like IR-INF-001, filter using Invoice.invoice_reconciliation_id
 - If request contains a Contract number like C-INF-001, filter using Contract.contract_number
 
+### Graph traversal rule:
+- You may traverse at most {max_hops} hops
+- Never exceed this limit
+- Prefer explicit relationship paths
+- Avoid variable-length traversal unless necessary
+- If using variable hops, use:
+  [*1..{max_hops}]
+
+
 ### User Question:
 {natural_language_request}
 
@@ -78,6 +85,7 @@ NEO4J_TEMPLATE_BASED_CYPHER_PROMPT = PromptTemplate(
         "natural_language_request",
         "cypher_templates",
         "top_k",
+        "max_hops",
     ],
     template=NEO4J_TEMPLATE_BASED_CYPHER_PROMPT_TEMPLATE,
 )

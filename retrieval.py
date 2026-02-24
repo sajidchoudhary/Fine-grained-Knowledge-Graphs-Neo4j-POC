@@ -1,15 +1,16 @@
 import os
 import json
 import logging
+import re
+import httpx
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
 from neo4j import GraphDatabase, Driver
 
 from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableSequence
-
 from openai import OpenAI
 
 from prompts import (
@@ -82,13 +83,8 @@ def load_graph_schema(schema_path: str) -> Dict[str, Any]:
 # Retrieval Class
 # ---------------------------
 class Retrieval:
-    """
-    Hybrid Retrieval:
-    1) Typo handling using Neo4j Fulltext fuzzy search on nodes (kg_nodes_fulltext)
-    2) Graph Cypher query generation (LLM)
-    3) Vector search from KGDocument (Neo4j vector index)
-    4) Final answer generation using BOTH contexts
-    """
+
+    LUCENE_SPECIAL = r'[\+\-\!\(\)\{\}\[\]\^"~\*\?:\\/]|&&|\|\|'
 
     def __init__(
         self,
@@ -97,303 +93,225 @@ class Retrieval:
         model_name: str = "gpt-5.1",
         openai_api_key: Optional[str] = None,
         top_k_templates: int = 5,
+        top_k_hops: int = 2,
         vector_top_k: int = 5,
         fuzzy_limit: int = 5,
         fuzzy_factor: float = 0.8,
     ) -> None:
+
         self.driver = driver
         self.graph_schema = graph_schema
         self.model_name = model_name
 
         self.top_k_templates = int(top_k_templates)
+        self.top_k_hops = int(top_k_hops)
         self.vector_top_k = int(vector_top_k)
 
         self.fuzzy_limit = int(fuzzy_limit)
         self.fuzzy_factor = float(fuzzy_factor)
 
-        # LLM for Cypher + QA
+        # 🔹 Shared HTTP client (SSL disabled)
+        self.http_client = httpx.Client(verify=False)
+
+        # 🔹 LLM
         self.llm = ChatOpenAI(
             model=self.model_name,
             temperature=0,
             api_key=openai_api_key,
+            http_client=self.http_client,
         )
 
-        # OpenAI client for embeddings
-        self.openai_client = OpenAI(api_key=openai_api_key)
+        # 🔹 Embedding client
+        self.openai_client = OpenAI(
+            api_key=openai_api_key,
+            http_client=self.http_client,
+        )
 
         # Chains
         self.nl_to_cypher_chain = RunnableSequence(
             NEO4J_TEMPLATE_BASED_CYPHER_PROMPT | self.llm
         )
+
         self.cypher_to_answer_chain = RunnableSequence(CYPHER_QA_PROMPT | self.llm)
 
-    def close(self) -> None:
-        try:
-            self.driver.close()
-            logger.info("Neo4j driver closed")
-        except Exception as e:
-            logger.warning("Failed to close Neo4j driver: %s", e)
+    # ---------------------------
+    # Utility
+    # ---------------------------
+    @staticmethod
+    def _sanitize_token(token: str) -> str:
+        token = re.sub(Retrieval.LUCENE_SPECIAL, " ", token)
+        token = re.sub(r"[^a-zA-Z0-9]", "", token)
+        return token.strip()
+
+    def _build_fuzzy_query(self, text: str) -> str:
+        raw_tokens = text.lower().split()
+        tokens = []
+        for t in raw_tokens:
+            clean = self._sanitize_token(t)
+            if len(clean) >= 3:
+                tokens.append(f"{clean}~{self.fuzzy_factor}")
+        return " ".join(tokens) if tokens else text
 
     # ---------------------------
-    # Neo4j helpers
+    # Neo4j Helper
     # ---------------------------
-    def run_query(
-        self,
-        cypher: str,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> List[Dict[str, Any]]:
-        params = params or {}
+    def run_query(self, cypher: str, params=None):
         with self.driver.session() as session:
-            result = session.run(cypher, params)
+            result = session.run(cypher, params or {})
             return [r.data() for r in result]
 
     # ---------------------------
-    # 1) Fulltext fuzzy search (typo handling)
+    # Fuzzy Search
     # ---------------------------
-    def fuzzy_node_search(self, user_text: str) -> List[Dict[str, Any]]:
-        """
-        Search nodes using fulltext index kg_nodes_fulltext.
-        Returns best candidate nodes that match question text (typo tolerant).
-        """
+    def fuzzy_node_search(self, user_text: str):
         if not user_text.strip():
             return []
 
-        q = f"{user_text}~{self.fuzzy_factor}"
+        fuzzy_q = self._build_fuzzy_query(user_text)
+        logger.info("Fuzzy query: %s", fuzzy_q)
 
         cypher = """
         CALL db.index.fulltext.queryNodes("kg_nodes_fulltext", $q)
         YIELD node, score
         RETURN labels(node) AS labels,
-               score AS score,
+               score,
                node.search_text AS search_text
         ORDER BY score DESC
         LIMIT $limit
         """
 
-        results = self.run_query(cypher, {"q": q, "limit": self.fuzzy_limit})
-        logger.info("Fuzzy search returned %d candidates", len(results))
-        return results
+        return self.run_query(
+            cypher,
+            {"q": fuzzy_q, "limit": self.fuzzy_limit},
+        )
 
     # ---------------------------
-    # 2) NL -> Cypher generation (LLM)
+    # Cypher Generation
     # ---------------------------
-    def generate_cypher(
-        self, question: str, fuzzy_context: Optional[List[Dict[str, Any]]] = None
-    ) -> str:
-        """
-        Generate Cypher query. We add fuzzy_context into schema prompt
-        so LLM can use corrected entities.
-        """
-        question = (question or "").strip()
-        if not question:
-            raise ValueError("Question cannot be empty")
-
-        logger.info("Generating Cypher for question: %s", question)
-
+    def generate_cypher(self, question, fuzzy_context):
         response = self.nl_to_cypher_chain.invoke(
             {
                 "graph_schema": self.graph_schema,
                 "natural_language_request": question,
                 "cypher_templates": CYPHER_TEMPLATES,
                 "top_k": self.top_k_templates,
-                # Add fuzzy candidates to prompt (very useful)
+                "max_hops": self.top_k_hops,
                 "fuzzy_candidates": fuzzy_context or [],
             }
         )
 
-        cypher_query = (getattr(response, "content", "") or "").strip()
-        if not cypher_query:
-            raise ValueError("Generated Cypher query is empty")
+        cypher = (getattr(response, "content", "") or "").strip()
 
-        logger.info("Generated Cypher:\n%s", cypher_query)
-        return cypher_query
+        if not cypher or cypher.lower() == "none":
+            raise ValueError(f"Invalid Cypher generated: {cypher}")
 
-    # ---------------------------
-    # 3) Execute Cypher on graph
-    # ---------------------------
-    def run_cypher_query(self, cypher_query: str) -> List[Dict[str, Any]]:
-        if not cypher_query.strip():
-            raise ValueError("Cypher query cannot be empty")
-
-        logger.info("Executing Cypher query...")
-        try:
-            rows = self.run_query(cypher_query)
-            logger.info("Graph query returned %d rows", len(rows))
-            return rows
-        except Exception as e:
-            logger.error("Cypher execution failed: %s", e)
-            raise
+        logger.info("Generated Cypher:\n%s", cypher)
+        return cypher
 
     # ---------------------------
-    # 4) Vector search on KGDocument
+    # Execute Cypher
     # ---------------------------
-    def embed_question(self, question: str) -> List[float]:
+    def run_cypher_query(self, cypher_query: str):
+        logger.info("Executing Cypher...")
+        return self.run_query(cypher_query)
+
+    # ---------------------------
+    # Vector Search
+    # ---------------------------
+    def embed_question(self, question: str):
         resp = self.openai_client.embeddings.create(
             model="text-embedding-3-large",
             input=question,
         )
         return resp.data[0].embedding
 
-    def vector_search(self, question: str) -> List[Dict[str, Any]]:
-        """
-        Vector similarity search in Neo4j against :KGDocument nodes.
-        Requires vector index: kgdoc_embedding_index
-        """
-        logger.info("Running vector search for additional context...")
-        q_embedding = self.embed_question(question)
+    def vector_search(self, question: str):
+        logger.info("Running vector search...")
+        emb = self.embed_question(question)
 
         cypher = """
         CALL db.index.vector.queryNodes("kgdoc_embedding_index", $k, $embedding)
         YIELD node, score
         RETURN node.doc_id AS doc_id,
                node.text AS text,
-               node.source_label AS source_label,
-               node.source_key AS source_key,
-               node.source_value AS source_value,
-               score AS score
+               score
         ORDER BY score DESC
         LIMIT $k
         """
 
-        results = self.run_query(
+        return self.run_query(
             cypher,
-            {"k": self.vector_top_k, "embedding": q_embedding},
+            {"k": self.vector_top_k, "embedding": emb},
         )
 
-        logger.info("Vector search returned %d docs", len(results))
-        return results
-
     # ---------------------------
-    # 5) Final answer generation
+    # Final Answer
     # ---------------------------
-    def generate_final_answer(
-        self,
-        question: str,
-        graph_results: List[Dict[str, Any]],
-        vector_results: List[Dict[str, Any]],
-    ) -> str:
-        """
-        Final answer uses BOTH:
-        - graph_results (structured truth)
-        - vector_results (extra semantic context)
-        """
-        logger.info("Generating final answer...")
-
-        context = {
-            "graph_results": graph_results,
-            "vector_results": vector_results,
-        }
-
+    def generate_final_answer(self, question, graph, vector):
         response = self.cypher_to_answer_chain.invoke(
             {
                 "natural_language_request": question,
-                "context": context,
+                "context": {
+                    "graph_results": graph,
+                    "vector_results": vector,
+                },
             }
         )
-
-        final_answer = (getattr(response, "content", "") or "").strip()
-        if not final_answer:
-            raise ValueError("Final response from LLM is empty")
-
-        return final_answer
+        return (getattr(response, "content", "") or "").strip()
 
     # ---------------------------
-    # Full pipeline
+    # Full Pipeline
     # ---------------------------
-    def ask(self, question: str) -> Dict[str, Any]:
-        logger.info("----- NEW QUESTION -----")
-        logger.info("User Question: %s", question)
+    def ask(self, question: str):
 
-        # Step 1: fuzzy candidates (typo help)
-        fuzzy_candidates = self.fuzzy_node_search(question)
+        logger.info("New question: %s", question)
 
-        # Step 2: Cypher generation with fuzzy hints
-        cypher_query = self.generate_cypher(question, fuzzy_candidates)
-
-        # Step 3: Graph execution
-        graph_results = self.run_cypher_query(cypher_query)
-
-        # Step 4: Vector search (always)
-        vector_results = self.vector_search(question)
-
-        # Step 5: Final answer
-        final_answer = self.generate_final_answer(
-            question, graph_results, vector_results
-        )
+        fuzzy = self.fuzzy_node_search(question)
+        cypher = self.generate_cypher(question, fuzzy)
+        graph = self.run_cypher_query(cypher)
+        vector = self.vector_search(question)
+        answer = self.generate_final_answer(question, graph, vector)
 
         return {
             "question": question,
-            "fuzzy_candidates": fuzzy_candidates,
-            "cypher_query": cypher_query,
-            "graph_results": graph_results,
-            "vector_results": vector_results,
-            "final_answer": final_answer,
+            "fuzzy_candidates": fuzzy,
+            "cypher_query": cypher,
+            "graph_results": graph,
+            "vector_results": vector,
+            "final_answer": answer,
         }
 
-    # ---------------------------
-    # Factory
-    # ---------------------------
-    @classmethod
-    def from_config(
-        cls,
-        config: AppConfig,
-        schema_path: str = SCHEMA_PATH,
-        model_name: str = "gpt-5.1",
-        top_k_templates: int = 5,
-        vector_top_k: int = 5,
-        fuzzy_limit: int = 5,
-        fuzzy_factor: float = 0.8,
-    ) -> "Retrieval":
-        graph_schema = load_graph_schema(schema_path)
-        driver = GraphDatabase.driver(
-            config.neo4j_uri,
-            auth=(config.neo4j_user, config.neo4j_password),
-        )
-        return cls(
-            driver=driver,
-            graph_schema=graph_schema,
-            model_name=model_name,
-            openai_api_key=config.openai_api_key,
-            top_k_templates=top_k_templates,
-            vector_top_k=vector_top_k,
-            fuzzy_limit=fuzzy_limit,
-            fuzzy_factor=fuzzy_factor,
-        )
+    def close(self):
+        self.driver.close()
+        self.http_client.close()
+        logger.info("Neo4j driver and HTTP client closed")
 
 
 # ---------------------------
-# CLI Test
+# CLI Mode
 # ---------------------------
-def main() -> None:
+def main():
     config = load_config(".env")
 
-    retriever = Retrieval.from_config(
-        config=config,
-        schema_path=SCHEMA_PATH,
-        model_name="gpt-5.1",
-        top_k_templates=5,
-        vector_top_k=5,
-        fuzzy_limit=5,
-        fuzzy_factor=0.8,
+    retriever = Retrieval(
+        driver=GraphDatabase.driver(
+            config.neo4j_uri,
+            auth=(config.neo4j_user, config.neo4j_password),
+        ),
+        graph_schema=load_graph_schema(SCHEMA_PATH),
+        openai_api_key=config.openai_api_key,
     )
 
     try:
         while True:
-            q = input("\nAsk a question (or type exit): ").strip()
-            if not q or q.lower() == "exit":
+            q = input("\nAsk a question (exit to quit): ").strip()
+            if q.lower() == "exit":
                 break
 
             out = retriever.ask(q)
 
-            print("\n--- Generated Cypher ---")
+            print("\n--- Cypher ---")
             print(out["cypher_query"])
-
-            print("\n--- Graph Results ---")
-            print(out["graph_results"])
-
-            print("\n--- Vector Results (Top) ---")
-            for d in out["vector_results"][:3]:
-                print(f"- {d['doc_id']} score={d['score']:.3f}")
 
             print("\n--- Final Answer ---")
             print(out["final_answer"])

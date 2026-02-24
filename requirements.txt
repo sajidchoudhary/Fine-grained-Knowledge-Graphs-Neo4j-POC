@@ -2,3 +2,15 @@ neo4j==6.1.0
 dotenv==0.9.9
 langchain-core==1.2.7
 langchain-openai==1.1.7
+
+
+
+
+dotenv                    0.9.9
+langchain                 1.2.8
+langchain-core            1.2.8
+langchain-openai          1.1.7
+langchain-text-splitters  0.3.11
+neo4j                     6.1.0
+python-dotenv             1.2.1
+streamlit                 1.53.0
